@@ -1,5 +1,18 @@
 const { useState, useEffect } = React;
 
+const firebaseConfig = {
+  apiKey: "AIzaSyCzlwmvTiw2ShxHCcKdHQq7LQKA26ZQ4aQ",
+  authDomain: "grind-app-c8776.firebaseapp.com",
+  projectId: "grind-app-c8776",
+  storageBucket: "grind-app-c8776.firebasestorage.app",
+  messagingSenderId: "588004199050",
+  appId: "1:588004199050:web:2a736a919f89a013b47b73"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
 const EXERCISES = [
   { id: "pushups", name: "Push-ups", emoji: "💪", muscle: "Chest & Triceps" },
   { id: "situps", name: "Sit-ups", emoji: "🔥", muscle: "Core" },
@@ -29,55 +42,8 @@ function getDayNum(start) {
 function getReps(dayNum, preset, customReps) {
   if (preset.id === "custom") return Math.max(10, parseInt(customReps)||10) + Math.floor((dayNum-1)/7)*5;
   return preset.startReps + Math.floor((dayNum-1)/preset.every)*preset.increment;
-}
-
-function load(key, def) { try { return JSON.parse(localStorage.getItem(key))||def; } catch { return def; } }function App() {
-  const [screen, setScreen] = useState(() => load("grind_preset", null) ? "tracker" : "onboard");
-  const [preset, setPreset] = useState(() => load("grind_preset", PRESETS[0]));
-  const [customReps, setCustomReps] = useState(10);
-  const [showCustom, setShowCustom] = useState(false);
-  const [startDate] = useState(() => {
-    const s = localStorage.getItem("grind_start");
-    if (s) return s;
-    const t = getTodayKey();
-    localStorage.setItem("grind_start", t);
-    return t;
-  });
-  const [done, setDone] = useState(() => load("grind_today_"+getTodayKey(), {}));
-  const [view, setView] = useState("today");
-
-  const today = getTodayKey();
-  const dayNum = getDayNum(startDate);
-  const reps = getReps(dayNum, preset, customReps);
-  const doneCount = EXERCISES.filter(e => done[e.id]).length;
-  const allDone = doneCount === EXERCISES.length;
-  const pct = Math.round((doneCount/EXERCISES.length)*100);
-  const accent = preset.color;
-
-  useEffect(() => { localStorage.setItem("grind_today_"+today, JSON.stringify(done)); }, [done]);
-
-  function toggle(id) { setDone(prev => ({...prev, [id]: !prev[id]})); }
-
-  function pickPreset(p) {
-    setPreset(p);
-    localStorage.setItem("grind_preset", JSON.stringify(p));
-    setScreen("tracker");
-  }
-
-  function getHistory() {
-    const days = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate()-i);
-      const key = d.toISOString().split("T")[0];
-      const data = load("grind_today_"+key, {});
-      const count = EXERCISES.filter(e => data[e.id]).length;
-      days.push({ key, count, label: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()] });
-    }
-    return days;
 }if (screen === "onboard") return (
     <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
-      <p style={{color:"#555",fontSize:12,letterSpacing:3,textTransform:"uppercase",margin:"0 0 6px"}}>Welcome to</p>
       <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
       <p style={{color:"#666",marginBottom:28}}>Pick your level.</p>
       {PRESETS.map(p => (
@@ -105,13 +71,13 @@ function load(key, def) { try { return JSON.parse(localStorage.getItem(key))||de
     <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <span style={{fontWeight:900,fontSize:24}}>GRIND<span style={{color:accent}}>.</span></span>
-        <div style={{display:"flex",gap:8}}>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
           {["today","history"].map(v => (
             <button key={v} onClick={() => setView(v)} style={{padding:"6px 14px",background:view===v?accent:"#151515",border:"none",borderRadius:20,color:view===v?"#000":"#555",fontSize:13,fontWeight:600,cursor:"pointer",textTransform:"capitalize"}}>{v}</button>
           ))}
+          <button onClick={() => auth.signOut()} style={{padding:"6px 10px",background:"#151515",border:"none",borderRadius:20,color:"#555",fontSize:12,cursor:"pointer"}}>Out</button>
         </div>
       </div>
-
       {view==="today" && <>
         <div style={{display:"flex",gap:10,marginBottom:16}}>
           {[["Day",dayNum],["Reps",reps],["Done",doneCount+"/"+EXERCISES.length]].map(([l,v]) => (
@@ -145,13 +111,11 @@ function load(key, def) { try { return JSON.parse(localStorage.getItem(key))||de
             </button>
           );
         })}
-        <button onClick={() => {localStorage.removeItem("grind_preset");setScreen("onboard");}} style={{marginTop:8,padding:"10px",background:"transparent",border:"1px solid #1e1e1e",borderRadius:10,color:"#333",fontSize:12,cursor:"pointer",width:"100%"}}>Change level</button>
       </>}
-
       {view==="history" && <>
         <h2 style={{fontWeight:800,fontSize:20,margin:"0 0 16px"}}>This Week</h2>
         <div style={{display:"flex",gap:8,marginBottom:24}}>
-          {getHistory().map(({key,count,label}) => {
+          {getWeek().map(({key,count,label}) => {
             const isToday = key===today;
             const full = count===EXERCISES.length;
             const partial = count>0;
@@ -164,7 +128,7 @@ function load(key, def) { try { return JSON.parse(localStorage.getItem(key))||de
             );
           })}
         </div>
-        <p style={{color:"#333",fontSize:12,textAlign:"center"}}>Keep showing up 💪</p>
+        <p style={{color:"#444",fontSize:13,textAlign:"center"}}>Signed in as {user?.email}</p>
       </>}
     </div>
   );

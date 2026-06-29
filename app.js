@@ -1,0 +1,173 @@
+const { useState, useEffect } = React;
+
+const EXERCISES = [
+  { id: "pushups", name: "Push-ups", emoji: "💪", muscle: "Chest & Triceps" },
+  { id: "situps", name: "Sit-ups", emoji: "🔥", muscle: "Core" },
+  { id: "squats", name: "Squats", emoji: "🦵", muscle: "Legs" },
+  { id: "calve_raises", name: "Calve Raises", emoji: "🦶", muscle: "Calves" },
+  { id: "pullups", name: "Pull-ups", emoji: "🏋️", muscle: "Back & Biceps" },
+  { id: "dips", name: "Dips", emoji: "⬇️", muscle: "Triceps" },
+  { id: "lunges", name: "Lunges", emoji: "🚶", muscle: "Legs & Glutes" },
+  { id: "burpees", name: "Burpees", emoji: "💥", muscle: "Full Body" },
+];
+
+const PRESETS = [
+  { id: "beginner", label: "Beginner 🌱", startReps: 10, increment: 2, every: 7, color: "#4caf50" },
+  { id: "intermediate", label: "Intermediate ⚡", startReps: 25, increment: 5, every: 5, color: "#ff9800" },
+  { id: "advanced", label: "Advanced 🔥", startReps: 50, increment: 10, every: 3, color: "#f44336" },
+  { id: "beast", label: "Beast Mode 💀", startReps: 100, increment: 20, every: 2, color: "#9c27b0" },
+];
+
+function getTodayKey() { return new Date().toISOString().split("T")[0]; }
+
+function getDayNum(start) {
+  const s = new Date(start), t = new Date();
+  s.setHours(0,0,0,0); t.setHours(0,0,0,0);
+  return Math.floor((t - s) / 86400000) + 1;
+}
+
+function getReps(dayNum, preset, customReps) {
+  if (preset.id === "custom") return Math.max(10, parseInt(customReps)||10) + Math.floor((dayNum-1)/7)*5;
+  return preset.startReps + Math.floor((dayNum-1)/preset.every)*preset.increment;
+}
+
+function load(key, def) { try { return JSON.parse(localStorage.getItem(key))||def; } catch { return def; } }function App() {
+  const [screen, setScreen] = useState(() => load("grind_preset", null) ? "tracker" : "onboard");
+  const [preset, setPreset] = useState(() => load("grind_preset", PRESETS[0]));
+  const [customReps, setCustomReps] = useState(10);
+  const [showCustom, setShowCustom] = useState(false);
+  const [startDate] = useState(() => {
+    const s = localStorage.getItem("grind_start");
+    if (s) return s;
+    const t = getTodayKey();
+    localStorage.setItem("grind_start", t);
+    return t;
+  });
+  const [done, setDone] = useState(() => load("grind_today_"+getTodayKey(), {}));
+  const [view, setView] = useState("today");
+
+  const today = getTodayKey();
+  const dayNum = getDayNum(startDate);
+  const reps = getReps(dayNum, preset, customReps);
+  const doneCount = EXERCISES.filter(e => done[e.id]).length;
+  const allDone = doneCount === EXERCISES.length;
+  const pct = Math.round((doneCount/EXERCISES.length)*100);
+  const accent = preset.color;
+
+  useEffect(() => { localStorage.setItem("grind_today_"+today, JSON.stringify(done)); }, [done]);
+
+  function toggle(id) { setDone(prev => ({...prev, [id]: !prev[id]})); }
+
+  function pickPreset(p) {
+    setPreset(p);
+    localStorage.setItem("grind_preset", JSON.stringify(p));
+    setScreen("tracker");
+  }
+
+  function getHistory() {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate()-i);
+      const key = d.toISOString().split("T")[0];
+      const data = load("grind_today_"+key, {});
+      const count = EXERCISES.filter(e => data[e.id]).length;
+      days.push({ key, count, label: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()] });
+    }
+    return days;
+}if (screen === "onboard") return (
+    <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
+      <p style={{color:"#555",fontSize:12,letterSpacing:3,textTransform:"uppercase",margin:"0 0 6px"}}>Welcome to</p>
+      <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
+      <p style={{color:"#666",marginBottom:28}}>Pick your level.</p>
+      {PRESETS.map(p => (
+        <button key={p.id} onClick={() => pickPreset(p)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:"#111",border:"2px solid #1e1e1e",borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:16,color:p.color}}>{p.label}</div>
+            <div style={{color:"#555",fontSize:12,marginTop:3}}>Starts at {p.startReps} reps · +{p.increment} every {p.every} days</div>
+          </div>
+        </button>
+      ))}
+      <button onClick={() => setShowCustom(!showCustom)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:"#111",border:"2px solid #1e1e1e",borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
+        <div style={{fontWeight:700,fontSize:16,color:"#00bcd4"}}>Custom ⚙️</div>
+      </button>
+      {showCustom && (
+        <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:14,padding:18,marginBottom:10}}>
+          <label style={{color:"#888",fontSize:13}}>Starting reps (min 10)</label>
+          <input type="number" min={10} max={1000} value={customReps} onChange={e => setCustomReps(e.target.value)} style={{width:"100%",padding:"12px",background:"#0a0a0a",border:"2px solid #222",borderRadius:10,color:"#fff",fontSize:22,fontWeight:800,marginTop:8,boxSizing:"border-box"}}/>
+          <button onClick={() => pickPreset({id:"custom",label:"Custom ⚙️",color:"#00bcd4"})} style={{padding:"14px",background:"#00bcd4",border:"none",borderRadius:12,color:"#000",fontWeight:800,fontSize:15,cursor:"pointer",width:"100%",marginTop:10}}>Start →</button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <span style={{fontWeight:900,fontSize:24}}>GRIND<span style={{color:accent}}>.</span></span>
+        <div style={{display:"flex",gap:8}}>
+          {["today","history"].map(v => (
+            <button key={v} onClick={() => setView(v)} style={{padding:"6px 14px",background:view===v?accent:"#151515",border:"none",borderRadius:20,color:view===v?"#000":"#555",fontSize:13,fontWeight:600,cursor:"pointer",textTransform:"capitalize"}}>{v}</button>
+          ))}
+        </div>
+      </div>
+
+      {view==="today" && <>
+        <div style={{display:"flex",gap:10,marginBottom:16}}>
+          {[["Day",dayNum],["Reps",reps],["Done",doneCount+"/"+EXERCISES.length]].map(([l,v]) => (
+            <div key={l} style={{flex:1,background:"#111",border:"1px solid #1e1e1e",borderRadius:14,padding:"14px 10px",textAlign:"center"}}>
+              <div style={{fontSize:20,fontWeight:800,color:accent}}>{v}</div>
+              <div style={{fontSize:11,color:"#555"}}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:14,padding:16,marginBottom:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+            <span style={{fontWeight:700}}>{allDone?"All done 🔥":`${doneCount}/${EXERCISES.length} done`}</span>
+            <span style={{color:"#555"}}>{pct}%</span>
+          </div>
+          <div style={{height:8,background:"#1a1a1a",borderRadius:8,overflow:"hidden"}}>
+            <div style={{height:"100%",width:pct+"%",background:allDone?"#4caf50":accent,borderRadius:8,transition:"width 0.4s"}}/>
+          </div>
+        </div>
+        {EXERCISES.map(ex => {
+          const isDone = !!done[ex.id];
+          return (
+            <button key={ex.id} onClick={() => toggle(ex.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 18px",background:isDone?"#0a1a0a":"#111",border:isDone?"1.5px solid #4caf5055":"1.5px solid #1e1e1e",borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
+              <div style={{display:"flex",alignItems:"center",gap:14}}>
+                <span style={{fontSize:24}}>{ex.emoji}</span>
+                <div>
+                  <div style={{fontSize:15,fontWeight:600,color:isDone?"#4caf50":"#e0e0e0",textDecoration:isDone?"line-through":"none",opacity:isDone?0.65:1}}>{ex.name}</div>
+                  <div style={{fontSize:12,color:"#555"}}>{reps} reps · {ex.muscle}</div>
+                </div>
+              </div>
+              <div style={{width:30,height:30,borderRadius:"50%",background:isDone?"#4caf50":"transparent",border:isDone?"none":"2px solid #333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#000",flexShrink:0}}>{isDone&&"✓"}</div>
+            </button>
+          );
+        })}
+        <button onClick={() => {localStorage.removeItem("grind_preset");setScreen("onboard");}} style={{marginTop:8,padding:"10px",background:"transparent",border:"1px solid #1e1e1e",borderRadius:10,color:"#333",fontSize:12,cursor:"pointer",width:"100%"}}>Change level</button>
+      </>}
+
+      {view==="history" && <>
+        <h2 style={{fontWeight:800,fontSize:20,margin:"0 0 16px"}}>This Week</h2>
+        <div style={{display:"flex",gap:8,marginBottom:24}}>
+          {getHistory().map(({key,count,label}) => {
+            const isToday = key===today;
+            const full = count===EXERCISES.length;
+            const partial = count>0;
+            return (
+              <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                <span style={{fontSize:10,color:isToday?accent:"#444"}}>{label}</span>
+                <div style={{width:"100%",aspectRatio:"1",borderRadius:8,background:full?"#4caf50":partial?"#ff9800":"#141414",border:isToday?"2px solid "+accent:"2px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{full?"✓":partial?"~":""}</div>
+                <span style={{fontSize:9,color:"#333"}}>{new Date(key+"T12:00:00").getDate()}</span>
+              </div>
+            );
+          })}
+        </div>
+        <p style={{color:"#333",fontSize:12,textAlign:"center"}}>Keep showing up 💪</p>
+      </>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));

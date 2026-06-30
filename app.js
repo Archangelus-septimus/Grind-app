@@ -44,6 +44,15 @@ function getReps(dayNum, preset, customReps) {
   return preset.startReps + Math.floor((dayNum-1)/preset.every)*preset.increment;
 }
 
+const BADGES = [
+  { id: "first", label: "First Step", emoji: "🌱", desc: "Complete 1 day", check: s => s.totalCompleted >= 1 },
+  { id: "week", label: "Week Warrior", emoji: "🔥", desc: "7-day streak", check: s => s.longestStreak >= 7 },
+  { id: "fortnight", label: "Two Weeks Strong", emoji: "⚡", desc: "14-day streak", check: s => s.longestStreak >= 14 },
+  { id: "month", label: "Monthly Beast", emoji: "🦾", desc: "30-day streak", check: s => s.longestStreak >= 30 },
+  { id: "century", label: "Centurion", emoji: "💯", desc: "100 total days", check: s => s.totalCompleted >= 100 },
+  { id: "unstoppable", label: "Unstoppable", emoji: "👑", desc: "60-day streak", check: s => s.longestStreak >= 60 },
+];
+
 function getTheme(dark) {
   return dark
     ? { bg:"#080808", text:"#f0f0f0", card:"#111", border:"#1e1e1e", subtext:"#555", faint:"#333" }
@@ -138,8 +147,7 @@ function App() {
   }, []);
 
   async function signInWithGoogle() {
-    try {
-      setErrorMsg("");
+    try {setErrorMsg("");
       const provider = new firebase.auth.GoogleAuthProvider();
       const result = await auth.signInWithPopup(provider);
       if (result.user) setUser(result.user);
@@ -268,8 +276,7 @@ function App() {
   if (screen === "onboard") return (
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
-      <p style={{color:T.subtext,marginBottom:20}}>Pick your level.</p>
-      <ErrorBanner/>
+      <p style={{color:T.subtext,marginBottom:20}}>Pick your level.</p><ErrorBanner/>
       {PRESETS.map(p => (
         <button key={p.id} onClick={() => pickPreset(p)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:T.card,border:`2px solid ${T.border}`,borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
           <div>
@@ -371,13 +378,29 @@ function App() {
                 ))}
               </div>
               <p style={{color:T.subtext,fontSize:11,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>All Time</p>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(10, 1fr)",gap:4,marginBottom:20}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(10, 1fr)",gap:4,marginBottom:24}}>
                 {stats.calendar.map(({key, full, partial}) => (
                   <div key={key} title={key} style={{
                     aspectRatio:"1", borderRadius:3,
                     background: full ? "#4caf50" : partial ? "#ff9800" : T.border,
                   }}/>
-                ))}
+                ))}</div>
+              <p style={{color:T.subtext,fontSize:11,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>Badges</p>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:10}}>
+                {BADGES.map(b => {
+                  const unlocked = b.check(stats);
+                  return (
+                    <div key={b.id} style={{
+                      background:T.card, border:`1px solid ${unlocked?accent+"55":T.border}`,
+                      borderRadius:14, padding:"16px 8px", textAlign:"center",
+                      opacity: unlocked ? 1 : 0.4,
+                    }}>
+                      <div style={{fontSize:28, marginBottom:6, filter: unlocked?"none":"grayscale(1)"}}>{b.emoji}</div>
+                      <div style={{fontSize:11, fontWeight:700, color:unlocked?T.text:T.subtext}}>{b.label}</div>
+                      <div style={{fontSize:9, color:T.subtext, marginTop:2}}>{b.desc}</div>
+                    </div>
+                  );
+                })}
               </div>
             </>
           );
@@ -388,4 +411,3 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
-                      

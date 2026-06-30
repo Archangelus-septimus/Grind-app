@@ -47,6 +47,7 @@ function getReps(dayNum, preset, customReps) {
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
   const [screen, setScreen] = useState("login");
   const [preset, setPreset] = useState(PRESETS[0]);
   const [customReps, setCustomReps] = useState(10);
@@ -55,54 +56,73 @@ function App() {
   const [done, setDone] = useState({});
   const [view, setView] = useState("today");
   const [history, setHistory] = useState({});
-useEffect(() => {
-    auth.getRedirectResult().catch(e => alert("Sign in error: " + e.message));
+
+  useEffect(() => {
     auth.onAuthStateChanged(async (u) => {
-  
-      setUser(u);
-      if (u) {
-        const doc = await db.collection("users").doc(u.uid).get();
-        if (doc.exists) {
-          const data = doc.data();
-          setPreset(data.preset || PRESETS[0]);
-          setStartDate(data.startDate || getTodayKey());
-          setScreen("tracker");
-          const today = getTodayKey();
-          const todayDoc = await db.collection("users").doc(u.uid).collection("workouts").doc(today).get();
-          if (todayDoc.exists) setDone(todayDoc.data());
-          const snap = await db.collection("users").doc(u.uid).collection("workouts").get();
-          const h = {};
-          snap.forEach(d => { h[d.id] = d.data(); });
-          setHistory(h);
+      try {
+        setUser(u);
+        if (u) {
+          const doc = await db.collection("users").doc(u.uid).get();
+          if (doc.exists) {
+            const data = doc.data();
+            setPreset(data.preset || PRESETS[0]);
+            setStartDate(data.startDate || getTodayKey());
+            setScreen("tracker");
+            const today = getTodayKey();
+            const todayDoc = await db.collection("users").doc(u.uid).collection("workouts").doc(today).get();
+            if (todayDoc.exists) setDone(todayDoc.data());
+            const snap = await db.collection("users").doc(u.uid).collection("workouts").get();
+            const h = {};
+            snap.forEach(d => { h[d.id] = d.data(); });
+            setHistory(h);
+          } else {
+            setScreen("onboard");
+          }
         } else {
-          setScreen("onboard");
+          setScreen("login");
         }
-      } else {
-        setScreen("login");
+      } catch (e) {
+        setErrorMsg("Auth state error: " + e.message);
       }
       setLoading(false);
     });
   }, []);
 
   async function signInWithGoogle() {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  await auth.signInWithRedirect(provider);
+    try {
+      setErrorMsg("");
+      const provider = new firebase.auth.GoogleAuthProvider();
+      const result = await auth.signInWithPopup(provider);
+      if (result.user) {
+        setUser(result.user);
+      }
+    } catch (e) {
+      setErrorMsg("Sign in failed: " + e.code + " - " + e.message);
     }
+  }
 
   async function pickPreset(p) {
-    setPreset(p);
-    const today = getTodayKey();
-    setStartDate(today);
-    await db.collection("users").doc(user.uid).set({ preset: p, startDate: today });
-    setScreen("tracker");
+    try {
+      setPreset(p);
+      const today = getTodayKey();
+      setStartDate(today);
+      await db.collection("users").doc(user.uid).set({ preset: p, startDate: today });
+      setScreen("tracker");
+    } catch (e) {
+      setErrorMsg("Save error: " + e.message);
+    }
   }
 
   async function toggle(id) {
-    const newDone = { ...done, [id]: !done[id] };
-    setDone(newDone);
-    const today = getTodayKey();
-    await db.collection("users").doc(user.uid).collection("workouts").doc(today).set(newDone);
-    setHistory(prev => ({ ...prev, [today]: newDone }));
+    try {
+      const newDone = { ...done, [id]: !done[id] };
+      setDone(newDone);
+      const today = getTodayKey();
+      await db.collection("users").doc(user.uid).collection("workouts").doc(today).set(newDone);
+      setHistory(prev => ({ ...prev, [today]: newDone }));
+    } catch (e) {
+      setErrorMsg("Update error: " + e.message);
+    }
   }
 
   const today = getTodayKey();
@@ -126,6 +146,13 @@ useEffect(() => {
     return days;
   }
 
+  const ErrorBanner = () => errorMsg ? (
+    <div style={{background:"#3a0a0a",border:"1px solid #ff4444",borderRadius:10,padding:"10px 14px",marginBottom:16,color:"#ff8888",fontSize:12}}>
+      ⚠️ {errorMsg}
+      <button onClick={() => setErrorMsg("")} style={{float:"right",background:"none",border:"none",color:"#ff8888",cursor:"pointer"}}>✕</button>
+    </div>
+  ) : null;
+
   if (loading) return (
     <div style={{minHeight:"100vh",background:"#080808",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{color:"#444",fontSize:14}}>Loading...</div>
@@ -135,7 +162,8 @@ useEffect(() => {
   if (screen === "login") return (
     <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"60px 18px 48px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
       <h1 style={{fontSize:48,fontWeight:900,margin:"0 0 8px",letterSpacing:-2}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
-      <p style={{color:"#555",marginBottom:48,textAlign:"center"}}>Track your calisthenics journey</p>
+      <p style={{color:"#555",marginBottom:32,textAlign:"center"}}>Track your calisthenics journey</p>
+      <div style={{width:"100%"}}><ErrorBanner/></div>
       <button onClick={signInWithGoogle} style={{display:"flex",alignItems:"center",gap:12,padding:"16px 24px",background:"#fff",border:"none",borderRadius:14,cursor:"pointer",fontSize:16,fontWeight:700,color:"#000",width:"100%",justifyContent:"center"}}>
         <img src="https://www.google.com/favicon.ico" width="20" height="20"/>
         Continue with Google
@@ -146,7 +174,8 @@ useEffect(() => {
   if (screen === "onboard") return (
     <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
-      <p style={{color:"#666",marginBottom:28}}>Pick your level.</p>
+      <p style={{color:"#666",marginBottom:20}}>Pick your level.</p>
+      <ErrorBanner/>
       {PRESETS.map(p => (
         <button key={p.id} onClick={() => pickPreset(p)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:"#111",border:"2px solid #1e1e1e",borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
           <div>
@@ -179,6 +208,7 @@ useEffect(() => {
           <button onClick={() => auth.signOut()} style={{padding:"6px 10px",background:"#151515",border:"none",borderRadius:20,color:"#555",fontSize:12,cursor:"pointer"}}>Out</button>
         </div>
       </div>
+      <ErrorBanner/>
       {view==="today" && <>
         <div style={{display:"flex",gap:10,marginBottom:16}}>
           {[["Day",dayNum],["Reps",reps],["Done",doneCount+"/"+EXERCISES.length]].map(([l,v]) => (
@@ -236,4 +266,4 @@ useEffect(() => {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
-    
+        

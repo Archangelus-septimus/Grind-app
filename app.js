@@ -141,7 +141,8 @@ function App() {
     try {
       setErrorMsg("");
       const provider = new firebase.auth.GoogleAuthProvider();
-      await auth.signInWithRedirect(provider);
+      const result = await auth.signInWithPopup(provider);
+      if (result.user) setUser(result.user);
     } catch (e) {
       setErrorMsg("Sign in failed: " + e.code + " - " + e.message);
     }
@@ -387,4 +388,4 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
-   
+                      

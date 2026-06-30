@@ -146,6 +146,44 @@ function App() {
     return days;
   }
 
+  function getAllTimeStats() {
+    const start = new Date(startDate);
+    const today2 = new Date();
+    start.setHours(0,0,0,0);
+    today2.setHours(0,0,0,0);
+    const totalDays = Math.floor((today2 - start) / 86400000) + 1;
+    let totalCompleted = 0, currentStreak = 0, longestStreak = 0, tempStreak = 0;
+    const check = new Date(start);
+    const calendar = [];
+    for (let i = 0; i < totalDays; i++) {
+      const key = check.toISOString().split("T")[0];
+      const data = history[key] || {};
+      const count = EXERCISES.filter(e => data[e.id]).length;
+      const full = count === EXERCISES.length;
+      if (full) {
+        totalCompleted++;
+        tempStreak++;
+        longestStreak = Math.max(longestStreak, tempStreak);
+      } else {
+        tempStreak = 0;
+      }
+      calendar.push({ key, full, partial: count > 0 && !full });
+      check.setDate(check.getDate() + 1);
+    }
+    const checkBack = new Date();
+    checkBack.setHours(0,0,0,0);
+    while (true) {
+      const key = checkBack.toISOString().split("T")[0];
+      const data = history[key] || {};
+      const count = EXERCISES.filter(e => data[e.id]).length;
+      if (count === EXERCISES.length) {
+        currentStreak++;
+        checkBack.setDate(checkBack.getDate() - 1);
+      } else break;
+    }
+    return { totalDays, totalCompleted, currentStreak, longestStreak, calendar };
+  }
+
   const ErrorBanner = () => errorMsg ? (
     <div style={{background:"#3a0a0a",border:"1px solid #ff4444",borderRadius:10,padding:"10px 14px",marginBottom:16,color:"#ff8888",fontSize:12}}>
       ⚠️ {errorMsg}
@@ -261,10 +299,36 @@ function App() {
           })}
         </div>
         <p style={{color:"#444",fontSize:13,textAlign:"center"}}>Signed in as {user?.email}</p>
+
+        {(() => {
+          const stats = getAllTimeStats();
+          return (
+            <>
+              <div style={{display:"flex",gap:10,margin:"24px 0 20px"}}>
+                {[["Total Days",stats.totalCompleted],["Current 🔥",stats.currentStreak],["Best 🏆",stats.longestStreak]].map(([l,v]) => (
+                  <div key={l} style={{flex:1,background:"#111",border:"1px solid #1e1e1e",borderRadius:14,padding:"14px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:20,fontWeight:800,color:accent}}>{v}</div>
+                    <div style={{fontSize:10,color:"#555"}}>{l}</div>
+                  </div>
+                ))}
+              </div>
+              <p style={{color:"#444",fontSize:11,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>All Time</p>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(10, 1fr)",gap:4,marginBottom:20}}>
+                {stats.calendar.map(({key, full, partial}) => (
+                  <div key={key} title={key} style={{
+                    aspectRatio:"1",
+                    borderRadius:3,
+                    background: full ? "#4caf50" : partial ? "#ff9800" : "#161616",
+                  }}/>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </>}
     </div>
   );
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
-  
+        

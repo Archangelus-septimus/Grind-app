@@ -42,7 +42,107 @@ function getDayNum(start) {
 function getReps(dayNum, preset, customReps) {
   if (preset.id === "custom") return Math.max(10, parseInt(customReps)||10) + Math.floor((dayNum-1)/7)*5;
   return preset.startReps + Math.floor((dayNum-1)/preset.every)*preset.increment;
-}if (screen === "onboard") return (
+}
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [screen, setScreen] = useState("login");
+  const [preset, setPreset] = useState(PRESETS[0]);
+  const [customReps, setCustomReps] = useState(10);
+  const [showCustom, setShowCustom] = useState(false);
+  const [startDate, setStartDate] = useState(getTodayKey());
+  const [done, setDone] = useState({});
+  const [view, setView] = useState("today");
+  const [history, setHistory] = useState({});
+
+  useEffect(() => {
+    auth.onAuthStateChanged(async (u) => {
+      setUser(u);
+      if (u) {
+        const doc = await db.collection("users").doc(u.uid).get();
+        if (doc.exists) {
+          const data = doc.data();
+          setPreset(data.preset || PRESETS[0]);
+          setStartDate(data.startDate || getTodayKey());
+          setScreen("tracker");
+          const today = getTodayKey();
+          const todayDoc = await db.collection("users").doc(u.uid).collection("workouts").doc(today).get();
+          if (todayDoc.exists) setDone(todayDoc.data());
+          const snap = await db.collection("users").doc(u.uid).collection("workouts").get();
+          const h = {};
+          snap.forEach(d => { h[d.id] = d.data(); });
+          setHistory(h);
+        } else {
+          setScreen("onboard");
+        }
+      } else {
+        setScreen("login");
+      }
+      setLoading(false);
+    });
+  }, []);
+
+  async function signInWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithPopup(provider);
+  }
+
+  async function pickPreset(p) {
+    setPreset(p);
+    const today = getTodayKey();
+    setStartDate(today);
+    await db.collection("users").doc(user.uid).set({ preset: p, startDate: today });
+    setScreen("tracker");
+  }
+
+  async function toggle(id) {
+    const newDone = { ...done, [id]: !done[id] };
+    setDone(newDone);
+    const today = getTodayKey();
+    await db.collection("users").doc(user.uid).collection("workouts").doc(today).set(newDone);
+    setHistory(prev => ({ ...prev, [today]: newDone }));
+  }
+
+  const today = getTodayKey();
+  const dayNum = getDayNum(startDate);
+  const reps = getReps(dayNum, preset, customReps);
+  const doneCount = EXERCISES.filter(e => done[e.id]).length;
+  const allDone = doneCount === EXERCISES.length;
+  const pct = Math.round((doneCount/EXERCISES.length)*100);
+  const accent = preset.color;
+
+  function getWeek() {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate()-i);
+      const key = d.toISOString().split("T")[0];
+      const data = history[key] || {};
+      const count = EXERCISES.filter(e => data[e.id]).length;
+      days.push({ key, count, label: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()] });
+    }
+    return days;
+  }
+
+  if (loading) return (
+    <div style={{minHeight:"100vh",background:"#080808",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:"#444",fontSize:14}}>Loading...</div>
+    </div>
+  );
+
+  if (screen === "login") return (
+    <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"60px 18px 48px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+      <h1 style={{fontSize:48,fontWeight:900,margin:"0 0 8px",letterSpacing:-2}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
+      <p style={{color:"#555",marginBottom:48,textAlign:"center"}}>Track your calisthenics journey</p>
+      <button onClick={signInWithGoogle} style={{display:"flex",alignItems:"center",gap:12,padding:"16px 24px",background:"#fff",border:"none",borderRadius:14,cursor:"pointer",fontSize:16,fontWeight:700,color:"#000",width:"100%",justifyContent:"center"}}>
+        <img src="https://www.google.com/favicon.ico" width="20" height="20"/>
+        Continue with Google
+      </button>
+    </div>
+  );
+
+  if (screen === "onboard") return (
     <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
       <p style={{color:"#666",marginBottom:28}}>Pick your level.</p>
@@ -135,3 +235,4 @@ function getReps(dayNum, preset, customReps) {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+    

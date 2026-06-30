@@ -84,9 +84,9 @@ function App() {
   }, []);
 
   async function signInWithGoogle() {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    await auth.signInWithPopup(provider);
-  }
+  const provider = new firebase.auth.GoogleAuthProvider();
+  await auth.signInWithRedirect(provider);
+    }
 
   async function pickPreset(p) {
     setPreset(p);

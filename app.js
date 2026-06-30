@@ -44,6 +44,12 @@ function getReps(dayNum, preset, customReps) {
   return preset.startReps + Math.floor((dayNum-1)/preset.every)*preset.increment;
 }
 
+function getTheme(dark) {
+  return dark
+    ? { bg:"#080808", text:"#f0f0f0", card:"#111", border:"#1e1e1e", subtext:"#555", faint:"#333" }
+    : { bg:"#f5f5f5", text:"#111", card:"#fff", border:"#e0e0e0", subtext:"#777", faint:"#bbb" };
+}
+
 function Confetti() {
   const pieces = Array.from({length: 60});
   const colors = ["#ff6b35","#4caf50","#00bcd4","#ff9800","#f44336","#9c27b0","#ffeb3b"];
@@ -63,13 +69,8 @@ function Confetti() {
         const color = colors[i % colors.length];
         return (
           <div key={i} style={{
-            position:"absolute",
-            left:`${left}vw`,
-            top:"-10vh",
-            width:size,
-            height:size*1.6,
-            background:color,
-            borderRadius:2,
+            position:"absolute", left:`${left}vw`, top:"-10vh",
+            width:size, height:size*1.6, background:color, borderRadius:2,
             animation:`confettiFall ${duration}s ease-in ${delay}s forwards`,
           }}/>
         );
@@ -90,6 +91,17 @@ function App() {
   const [done, setDone] = useState({});
   const [view, setView] = useState("today");
   const [history, setHistory] = useState({});
+  const [dark, setDark] = useState(() => localStorage.getItem("grind_theme") !== "light");
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [prevAllDone, setPrevAllDone] = useState(false);
+
+  const T = getTheme(dark);
+
+  function toggleTheme() {
+    const newDark = !dark;
+    setDark(newDark);
+    localStorage.setItem("grind_theme", newDark ? "dark" : "light");
+  }
 
   useEffect(() => {
     auth.getRedirectResult().catch(e => {
@@ -167,8 +179,6 @@ function App() {
   const perfectDone = doneCount === EXERCISES.length;
   const pct = Math.round((doneCount/EXERCISES.length)*100);
   const accent = preset.color;
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [prevAllDone, setPrevAllDone] = useState(false);
 
   useEffect(() => {
     if (allDone && !prevAllDone) {
@@ -204,7 +214,7 @@ function App() {
       const key = check.toISOString().split("T")[0];
       const data = history[key] || {};
       const count = EXERCISES.filter(e => data[e.id]).length;
-      const full = count === EXERCISES.length;
+      const full = count >= EXERCISES.length - 1;
       if (full) {
         totalCompleted++;
         tempStreak++;
@@ -221,7 +231,7 @@ function App() {
       const key = checkBack.toISOString().split("T")[0];
       const data = history[key] || {};
       const count = EXERCISES.filter(e => data[e.id]).length;
-      if (count === EXERCISES.length) {
+      if (count >= EXERCISES.length - 1) {
         currentStreak++;
         checkBack.setDate(checkBack.getDate() - 1);
       } else break;
@@ -237,15 +247,15 @@ function App() {
   ) : null;
 
   if (loading) return (
-    <div style={{minHeight:"100vh",background:"#080808",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{color:"#444",fontSize:14}}>Loading...</div>
+    <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:T.subtext,fontSize:14}}>Loading...</div>
     </div>
   );
 
   if (screen === "login") return (
-    <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"60px 18px 48px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"60px 18px 48px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
       <h1 style={{fontSize:48,fontWeight:900,margin:"0 0 8px",letterSpacing:-2}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
-      <p style={{color:"#555",marginBottom:32,textAlign:"center"}}>Track your calisthenics journey</p>
+      <p style={{color:T.subtext,marginBottom:32,textAlign:"center"}}>Track your calisthenics journey</p>
       <div style={{width:"100%"}}><ErrorBanner/></div>
       <button onClick={signInWithGoogle} style={{display:"flex",alignItems:"center",gap:12,padding:"16px 24px",background:"#fff",border:"none",borderRadius:14,cursor:"pointer",fontSize:16,fontWeight:700,color:"#000",width:"100%",justifyContent:"center"}}>
         <img src="https://www.google.com/favicon.ico" width="20" height="20"/>
@@ -255,25 +265,25 @@ function App() {
   );
 
   if (screen === "onboard") return (
-    <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
-      <p style={{color:"#666",marginBottom:20}}>Pick your level.</p>
+      <p style={{color:T.subtext,marginBottom:20}}>Pick your level.</p>
       <ErrorBanner/>
       {PRESETS.map(p => (
-        <button key={p.id} onClick={() => pickPreset(p)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:"#111",border:"2px solid #1e1e1e",borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
+        <button key={p.id} onClick={() => pickPreset(p)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:T.card,border:`2px solid ${T.border}`,borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
           <div>
             <div style={{fontWeight:700,fontSize:16,color:p.color}}>{p.label}</div>
-            <div style={{color:"#555",fontSize:12,marginTop:3}}>Starts at {p.startReps} reps · +{p.increment} every {p.every} days</div>
+            <div style={{color:T.subtext,fontSize:12,marginTop:3}}>Starts at {p.startReps} reps · +{p.increment} every {p.every} days</div>
           </div>
         </button>
       ))}
-      <button onClick={() => setShowCustom(!showCustom)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:"#111",border:"2px solid #1e1e1e",borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
+      <button onClick={() => setShowCustom(!showCustom)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:T.card,border:`2px solid ${T.border}`,borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
         <div style={{fontWeight:700,fontSize:16,color:"#00bcd4"}}>Custom ⚙️</div>
       </button>
       {showCustom && (
-        <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:14,padding:18,marginBottom:10}}>
-          <label style={{color:"#888",fontSize:13}}>Starting reps (min 10)</label>
-          <input type="number" min={10} max={1000} value={customReps} onChange={e => setCustomReps(e.target.value)} style={{width:"100%",padding:"12px",background:"#0a0a0a",border:"2px solid #222",borderRadius:10,color:"#fff",fontSize:22,fontWeight:800,marginTop:8,boxSizing:"border-box"}}/>
+        <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:18,marginBottom:10}}>
+          <label style={{color:T.subtext,fontSize:13}}>Starting reps (min 10)</label>
+          <input type="number" min={10} max={1000} value={customReps} onChange={e => setCustomReps(e.target.value)} style={{width:"100%",padding:"12px",background:T.bg,border:`2px solid ${T.border}`,borderRadius:10,color:T.text,fontSize:22,fontWeight:800,marginTop:8,boxSizing:"border-box"}}/>
           <button onClick={() => pickPreset({id:"custom",label:"Custom ⚙️",color:"#00bcd4"})} style={{padding:"14px",background:"#00bcd4",border:"none",borderRadius:12,color:"#000",fontWeight:800,fontSize:15,cursor:"pointer",width:"100%",marginTop:10}}>Start →</button>
         </div>
       )}
@@ -281,14 +291,15 @@ function App() {
   );
 
   return (
-    <div style={{minHeight:"100vh",background:"#080808",color:"#f0f0f0",fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <span style={{fontWeight:900,fontSize:24}}>GRIND<span style={{color:accent}}>.</span></span>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button onClick={toggleTheme} style={{width:30,height:30,borderRadius:"50%",background:T.card,border:`1px solid ${T.border}`,cursor:"pointer",fontSize:14}}>{dark?"☀️":"🌙"}</button>
           {["today","history"].map(v => (
-            <button key={v} onClick={() => setView(v)} style={{padding:"6px 14px",background:view===v?accent:"#151515",border:"none",borderRadius:20,color:view===v?"#000":"#555",fontSize:13,fontWeight:600,cursor:"pointer",textTransform:"capitalize"}}>{v}</button>
+            <button key={v} onClick={() => setView(v)} style={{padding:"6px 14px",background:view===v?accent:T.card,border:"none",borderRadius:20,color:view===v?"#000":T.subtext,fontSize:13,fontWeight:600,cursor:"pointer",textTransform:"capitalize"}}>{v}</button>
           ))}
-          <button onClick={() => auth.signOut()} style={{padding:"6px 10px",background:"#151515",border:"none",borderRadius:20,color:"#555",fontSize:12,cursor:"pointer"}}>Out</button>
+          <button onClick={() => auth.signOut()} style={{padding:"6px 10px",background:T.card,border:"none",borderRadius:20,color:T.subtext,fontSize:12,cursor:"pointer"}}>Out</button>
         </div>
       </div>
       <ErrorBanner/>
@@ -296,55 +307,55 @@ function App() {
       {view==="today" && <>
         <div style={{display:"flex",gap:10,marginBottom:16}}>
           {[["Day",dayNum],["Reps",reps],["Done",doneCount+"/"+EXERCISES.length]].map(([l,v]) => (
-            <div key={l} style={{flex:1,background:"#111",border:"1px solid #1e1e1e",borderRadius:14,padding:"14px 10px",textAlign:"center"}}>
+            <div key={l} style={{flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px 10px",textAlign:"center"}}>
               <div style={{fontSize:20,fontWeight:800,color:accent}}>{v}</div>
-              <div style={{fontSize:11,color:"#555"}}>{l}</div>
+              <div style={{fontSize:11,color:T.subtext}}>{l}</div>
             </div>
           ))}
         </div>
-        <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:14,padding:16,marginBottom:16}}>
+        <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:16,marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
             <span style={{fontWeight:700}}>{perfectDone?"Perfect day! 🔥":allDone?"Crushed it! 💪":`${doneCount}/${EXERCISES.length} done`}</span>
-            <span style={{color:"#555"}}>{pct}%</span>
+            <span style={{color:T.subtext}}>{pct}%</span>
           </div>
-          <div style={{height:8,background:"#1a1a1a",borderRadius:8,overflow:"hidden"}}>
+          <div style={{height:8,background:T.border,borderRadius:8,overflow:"hidden"}}>
             <div style={{height:"100%",width:pct+"%",background:allDone?"#4caf50":accent,borderRadius:8,transition:"width 0.4s"}}/>
           </div>
         </div>
         {EXERCISES.map(ex => {
           const isDone = !!done[ex.id];
           return (
-            <button key={ex.id} onClick={() => toggle(ex.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 18px",background:isDone?"#0a1a0a":"#111",border:isDone?"1.5px solid #4caf5055":"1.5px solid #1e1e1e",borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
+            <button key={ex.id} onClick={() => toggle(ex.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 18px",background:isDone?(dark?"#0a1a0a":"#e8f5e9"):T.card,border:isDone?"1.5px solid #4caf5055":`1.5px solid ${T.border}`,borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
               <div style={{display:"flex",alignItems:"center",gap:14}}>
                 <span style={{fontSize:24}}>{ex.emoji}</span>
                 <div>
-                  <div style={{fontSize:15,fontWeight:600,color:isDone?"#4caf50":"#e0e0e0",textDecoration:isDone?"line-through":"none",opacity:isDone?0.65:1}}>{ex.name}</div>
-                  <div style={{fontSize:12,color:"#555"}}>{reps} reps · {ex.muscle}</div>
+                  <div style={{fontSize:15,fontWeight:600,color:isDone?"#4caf50":T.text,textDecoration:isDone?"line-through":"none",opacity:isDone?0.8:1}}>{ex.name}</div>
+                  <div style={{fontSize:12,color:T.subtext}}>{reps} reps · {ex.muscle}</div>
                 </div>
               </div>
-              <div style={{width:30,height:30,borderRadius:"50%",background:isDone?"#4caf50":"transparent",border:isDone?"none":"2px solid #333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#000",flexShrink:0}}>{isDone&&"✓"}</div>
+              <div style={{width:30,height:30,borderRadius:"50%",background:isDone?"#4caf50":"transparent",border:isDone?"none":`2px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#000",flexShrink:0}}>{isDone&&"✓"}</div>
             </button>
           );
         })}
-        <button onClick={() => setScreen("onboard")} style={{marginTop:8,padding:"10px",background:"transparent",border:"1px solid #1e1e1e",borderRadius:10,color:"#333",fontSize:12,cursor:"pointer",width:"100%"}}>Change level</button>
+        <button onClick={() => setScreen("onboard")} style={{marginTop:8,padding:"10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:10,color:T.faint,fontSize:12,cursor:"pointer",width:"100%"}}>Change level</button>
       </>}
       {view==="history" && <>
         <h2 style={{fontWeight:800,fontSize:20,margin:"0 0 16px"}}>This Week</h2>
         <div style={{display:"flex",gap:8,marginBottom:24}}>
           {getWeek().map(({key,count,label}) => {
             const isToday = key===today;
-            const full = count===EXERCISES.length;
-            const partial = count>0;
+            const full = count>=EXERCISES.length-1;
+            const partial = count>0 && !full;
             return (
               <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-                <span style={{fontSize:10,color:isToday?accent:"#444"}}>{label}</span>
-                <div style={{width:"100%",aspectRatio:"1",borderRadius:8,background:full?"#4caf50":partial?"#ff9800":"#141414",border:isToday?"2px solid "+accent:"2px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{full?"✓":partial?"~":""}</div>
-                <span style={{fontSize:9,color:"#333"}}>{new Date(key+"T12:00:00").getDate()}</span>
+                <span style={{fontSize:10,color:isToday?accent:T.subtext}}>{label}</span>
+                <div style={{width:"100%",aspectRatio:"1",borderRadius:8,background:full?"#4caf50":partial?"#ff9800":T.border,border:isToday?"2px solid "+accent:"2px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{full?"✓":partial?"~":""}</div>
+                <span style={{fontSize:9,color:T.faint}}>{new Date(key+"T12:00:00").getDate()}</span>
               </div>
             );
           })}
         </div>
-        <p style={{color:"#444",fontSize:13,textAlign:"center"}}>Signed in as {user?.email}</p>
+        <p style={{color:T.subtext,fontSize:13,textAlign:"center"}}>Signed in as {user?.email}</p>
 
         {(() => {
           const stats = getAllTimeStats();
@@ -352,19 +363,18 @@ function App() {
             <>
               <div style={{display:"flex",gap:10,margin:"24px 0 20px"}}>
                 {[["Total Days",stats.totalCompleted],["Current 🔥",stats.currentStreak],["Best 🏆",stats.longestStreak]].map(([l,v]) => (
-                  <div key={l} style={{flex:1,background:"#111",border:"1px solid #1e1e1e",borderRadius:14,padding:"14px 8px",textAlign:"center"}}>
+                  <div key={l} style={{flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px 8px",textAlign:"center"}}>
                     <div style={{fontSize:20,fontWeight:800,color:accent}}>{v}</div>
-                    <div style={{fontSize:10,color:"#555"}}>{l}</div>
+                    <div style={{fontSize:10,color:T.subtext}}>{l}</div>
                   </div>
                 ))}
               </div>
-              <p style={{color:"#444",fontSize:11,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>All Time</p>
+              <p style={{color:T.subtext,fontSize:11,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>All Time</p>
               <div style={{display:"grid",gridTemplateColumns:"repeat(10, 1fr)",gap:4,marginBottom:20}}>
                 {stats.calendar.map(({key, full, partial}) => (
                   <div key={key} title={key} style={{
-                    aspectRatio:"1",
-                    borderRadius:3,
-                    background: full ? "#4caf50" : partial ? "#ff9800" : "#161616",
+                    aspectRatio:"1", borderRadius:3,
+                    background: full ? "#4caf50" : partial ? "#ff9800" : T.border,
                   }}/>
                 ))}
               </div>
@@ -377,4 +387,4 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
-  
+   

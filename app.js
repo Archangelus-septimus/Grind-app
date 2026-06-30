@@ -55,9 +55,9 @@ function App() {
   const [done, setDone] = useState({});
   const [view, setView] = useState("today");
   const [history, setHistory] = useState({});
-
-  useEffect(() => {
+useEffect(() => {
     auth.onAuthStateChanged(async (u) => {
+  
       setUser(u);
       if (u) {
         const doc = await db.collection("users").doc(u.uid).get();

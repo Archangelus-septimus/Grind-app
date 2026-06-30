@@ -44,6 +44,40 @@ function getReps(dayNum, preset, customReps) {
   return preset.startReps + Math.floor((dayNum-1)/preset.every)*preset.increment;
 }
 
+function Confetti() {
+  const pieces = Array.from({length: 60});
+  const colors = ["#ff6b35","#4caf50","#00bcd4","#ff9800","#f44336","#9c27b0","#ffeb3b"];
+  return (
+    <div style={{position:"fixed",inset:0,pointerEvents:"none",overflow:"hidden",zIndex:9999}}>
+      <style>{`
+        @keyframes confettiFall {
+          0% { transform: translateY(-10vh) rotate(0deg); opacity:1; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity:0.3; }
+        }
+      `}</style>
+      {pieces.map((_, i) => {
+        const left = Math.random()*100;
+        const delay = Math.random()*0.5;
+        const duration = 1.8 + Math.random()*1.2;
+        const size = 6 + Math.random()*6;
+        const color = colors[i % colors.length];
+        return (
+          <div key={i} style={{
+            position:"absolute",
+            left:`${left}vw`,
+            top:"-10vh",
+            width:size,
+            height:size*1.6,
+            background:color,
+            borderRadius:2,
+            animation:`confettiFall ${duration}s ease-in ${delay}s forwards`,
+          }}/>
+        );
+      })}
+    </div>
+  );
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -129,9 +163,20 @@ function App() {
   const dayNum = getDayNum(startDate);
   const reps = getReps(dayNum, preset, customReps);
   const doneCount = EXERCISES.filter(e => done[e.id]).length;
-  const allDone = doneCount === EXERCISES.length;
+  const allDone = doneCount >= EXERCISES.length - 1;
+  const perfectDone = doneCount === EXERCISES.length;
   const pct = Math.round((doneCount/EXERCISES.length)*100);
   const accent = preset.color;
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [prevAllDone, setPrevAllDone] = useState(false);
+
+  useEffect(() => {
+    if (allDone && !prevAllDone) {
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 2500);
+    }
+    setPrevAllDone(allDone);
+  }, [allDone]);
 
   function getWeek() {
     const days = [];
@@ -247,6 +292,7 @@ function App() {
         </div>
       </div>
       <ErrorBanner/>
+      {showConfetti && <Confetti/>}
       {view==="today" && <>
         <div style={{display:"flex",gap:10,marginBottom:16}}>
           {[["Day",dayNum],["Reps",reps],["Done",doneCount+"/"+EXERCISES.length]].map(([l,v]) => (
@@ -258,7 +304,7 @@ function App() {
         </div>
         <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:14,padding:16,marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-            <span style={{fontWeight:700}}>{allDone?"All done 🔥":`${doneCount}/${EXERCISES.length} done`}</span>
+            <span style={{fontWeight:700}}>{perfectDone?"Perfect day! 🔥":allDone?"Crushed it! 💪":`${doneCount}/${EXERCISES.length} done`}</span>
             <span style={{color:"#555"}}>{pct}%</span>
           </div>
           <div style={{height:8,background:"#1a1a1a",borderRadius:8,overflow:"hidden"}}>
@@ -331,4 +377,4 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
-        
+  

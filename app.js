@@ -58,6 +58,9 @@ function App() {
   const [history, setHistory] = useState({});
 
   useEffect(() => {
+    auth.getRedirectResult().catch(e => {
+      setErrorMsg("Redirect error: " + e.code + " - " + e.message);
+    });
     auth.onAuthStateChanged(async (u) => {
       try {
         setUser(u);
@@ -92,10 +95,7 @@ function App() {
     try {
       setErrorMsg("");
       const provider = new firebase.auth.GoogleAuthProvider();
-      const result = await auth.signInWithPopup(provider);
-      if (result.user) {
-        setUser(result.user);
-      }
+      await auth.signInWithRedirect(provider);
     } catch (e) {
       setErrorMsg("Sign in failed: " + e.code + " - " + e.message);
     }
@@ -242,6 +242,7 @@ function App() {
             </button>
           );
         })}
+        <button onClick={() => setScreen("onboard")} style={{marginTop:8,padding:"10px",background:"transparent",border:"1px solid #1e1e1e",borderRadius:10,color:"#333",fontSize:12,cursor:"pointer",width:"100%"}}>Change level</button>
       </>}
       {view==="history" && <>
         <h2 style={{fontWeight:800,fontSize:20,margin:"0 0 16px"}}>This Week</h2>
@@ -266,4 +267,4 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
-        
+  

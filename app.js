@@ -103,6 +103,7 @@ function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("grind_theme") !== "light");
   const [showConfetti, setShowConfetti] = useState(false);
   const [prevAllDone, setPrevAllDone] = useState(false);
+  const [isChangingLevel, setIsChangingLevel] = useState(false);
 
   const T = getTheme(dark);
 
@@ -146,8 +147,8 @@ function App() {
     });
   }, []);
 
-  async function signInWithGoogle() {
-    try {setErrorMsg("");
+  async function signInWithGoogle() {try {
+      setErrorMsg("");
       const provider = new firebase.auth.GoogleAuthProvider();
       const result = await auth.signInWithPopup(provider);
       if (result.user) setUser(result.user);
@@ -163,6 +164,7 @@ function App() {
       setStartDate(today);
       await db.collection("users").doc(user.uid).set({ preset: p, startDate: today });
       setScreen("tracker");
+      setIsChangingLevel(false);
     } catch (e) {
       setErrorMsg("Save error: " + e.message);
     }
@@ -277,6 +279,11 @@ function App() {
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
       <p style={{color:T.subtext,marginBottom:20}}>Pick your level.</p><ErrorBanner/>
+      {isChangingLevel && (
+        <button onClick={() => { setScreen("tracker"); setIsChangingLevel(false); }} style={{background:"none",border:"none",color:T.subtext,fontSize:14,cursor:"pointer",marginBottom:16,padding:0,display:"block"}}>
+          ← Back
+        </button>
+      )}
       {PRESETS.map(p => (
         <button key={p.id} onClick={() => pickPreset(p)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:T.card,border:`2px solid ${T.border}`,borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
           <div>
@@ -345,7 +352,7 @@ function App() {
             </button>
           );
         })}
-        <button onClick={() => setScreen("onboard")} style={{marginTop:8,padding:"10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:10,color:T.faint,fontSize:12,cursor:"pointer",width:"100%"}}>Change level</button>
+        <button onClick={() => { setScreen("onboard"); setIsChangingLevel(true); }} style={{marginTop:8,padding:"10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:10,color:T.faint,fontSize:12,cursor:"pointer",width:"100%"}}>Change level</button>
       </>}
       {view==="history" && <>
         <h2 style={{fontWeight:800,fontSize:20,margin:"0 0 16px"}}>This Week</h2>
@@ -384,7 +391,8 @@ function App() {
                     aspectRatio:"1", borderRadius:3,
                     background: full ? "#4caf50" : partial ? "#ff9800" : T.border,
                   }}/>
-                ))}</div>
+                ))}
+              </div>
               <p style={{color:T.subtext,fontSize:11,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>Badges</p>
               <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:10}}>
                 {BADGES.map(b => {

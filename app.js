@@ -56,6 +56,7 @@ function App() {
   const [view, setView] = useState("today");
   const [history, setHistory] = useState({});
 useEffect(() => {
+    auth.getRedirectResult().catch(e => alert("Sign in error: " + e.message));
     auth.onAuthStateChanged(async (u) => {
   
       setUser(u);

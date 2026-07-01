@@ -31,6 +31,15 @@ const PRESETS = [
   { id: "beast", label: "Beast Mode 💀", startReps: 100, increment: 20, every: 2, color: "#9c27b0" },
 ];
 
+const BADGES = [
+  { id: "first", label: "First Step", emoji: "🌱", desc: "Complete 1 day", check: s => s.totalCompleted >= 1 },
+  { id: "week", label: "Week Warrior", emoji: "🔥", desc: "7-day streak", check: s => s.longestStreak >= 7 },
+  { id: "fortnight", label: "Two Weeks Strong", emoji: "⚡", desc: "14-day streak", check: s => s.longestStreak >= 14 },
+  { id: "month", label: "Monthly Beast", emoji: "🦾", desc: "30-day streak", check: s => s.longestStreak >= 30 },
+  { id: "century", label: "Centurion", emoji: "💯", desc: "100 total days", check: s => s.totalCompleted >= 100 },
+  { id: "unstoppable", label: "Unstoppable", emoji: "👑", desc: "60-day streak", check: s => s.longestStreak >= 60 },
+];
+
 function getTodayKey() { return new Date().toISOString().split("T")[0]; }
 
 function getDayNum(start) {
@@ -43,15 +52,6 @@ function getReps(dayNum, preset, customReps) {
   if (preset.id === "custom") return Math.max(10, parseInt(customReps)||10) + Math.floor((dayNum-1)/7)*5;
   return preset.startReps + Math.floor((dayNum-1)/preset.every)*preset.increment;
 }
-
-const BADGES = [
-  { id: "first", label: "First Step", emoji: "🌱", desc: "Complete 1 day", check: s => s.totalCompleted >= 1 },
-  { id: "week", label: "Week Warrior", emoji: "🔥", desc: "7-day streak", check: s => s.longestStreak >= 7 },
-  { id: "fortnight", label: "Two Weeks Strong", emoji: "⚡", desc: "14-day streak", check: s => s.longestStreak >= 14 },
-  { id: "month", label: "Monthly Beast", emoji: "🦾", desc: "30-day streak", check: s => s.longestStreak >= 30 },
-  { id: "century", label: "Centurion", emoji: "💯", desc: "100 total days", check: s => s.totalCompleted >= 100 },
-  { id: "unstoppable", label: "Unstoppable", emoji: "👑", desc: "60-day streak", check: s => s.longestStreak >= 60 },
-];
 
 function getTheme(dark) {
   return dark
@@ -113,9 +113,26 @@ function App() {
     localStorage.setItem("grind_theme", newDark ? "dark" : "light");
   }
 
+  async function loadLevelData(uid, levelId) {
+    const today = getTodayKey();
+    const todayDoc = await db.collection("users").doc(uid)
+      .collection("levels").doc(levelId)
+      .collection("workouts").doc(today).get();
+    const snap = await db.collection("users").doc(uid)
+      .collection("levels").doc(levelId)
+      .collection("workouts").get();
+    const h = {};
+    snap.forEach(d => { h[d.id] = d.data(); });
+    setHistory(h);
+    if (todayDoc.exists) setDone(todayDoc.data());
+    else setDone({});
+  }
+
   useEffect(() => {
     auth.getRedirectResult().catch(e => {
-      setErrorMsg("Redirect error: " + e.code + " - " + e.message);
+      if (e.code !== "auth/no-auth-event") {
+        setErrorMsg("Redirect error: " + e.message);
+      }
     });
     auth.onAuthStateChanged(async (u) => {
       try {
@@ -124,16 +141,11 @@ function App() {
           const doc = await db.collection("users").doc(u.uid).get();
           if (doc.exists) {
             const data = doc.data();
-            setPreset(data.preset || PRESETS[0]);
+            const p = data.preset || PRESETS[0];
+            setPreset(p);
             setStartDate(data.startDate || getTodayKey());
             setScreen("tracker");
-            const today = getTodayKey();
-            const todayDoc = await db.collection("users").doc(u.uid).collection("workouts").doc(today).get();
-            if (todayDoc.exists) setDone(todayDoc.data());
-            const snap = await db.collection("users").doc(u.uid).collection("workouts").get();
-            const h = {};
-            snap.forEach(d => { h[d.id] = d.data(); });
-            setHistory(h);
+            await loadLevelData(u.uid, p.id);
           } else {
             setScreen("onboard");
           }
@@ -141,13 +153,14 @@ function App() {
           setScreen("login");
         }
       } catch (e) {
-        setErrorMsg("Auth state error: " + e.message);
+        setErrorMsg("Auth error: " + e.message);
       }
       setLoading(false);
     });
   }, []);
 
-  async function signInWithGoogle() {try {
+  async function signInWithGoogle() {
+    try {
       setErrorMsg("");
       const provider = new firebase.auth.GoogleAuthProvider();
       const result = await auth.signInWithPopup(provider);
@@ -155,14 +168,22 @@ function App() {
     } catch (e) {
       setErrorMsg("Sign in failed: " + e.code + " - " + e.message);
     }
-  }
-
-  async function pickPreset(p) {
+   }async function pickPreset(p) {
     try {
       setPreset(p);
       const today = getTodayKey();
-      setStartDate(today);
-      await db.collection("users").doc(user.uid).set({ preset: p, startDate: today });
+      const levelDoc = await db.collection("users").doc(user.uid)
+        .collection("levels").doc(p.id).get();
+      let levelStartDate = today;
+      if (levelDoc.exists && levelDoc.data().startDate) {
+        levelStartDate = levelDoc.data().startDate;
+      } else {
+        await db.collection("users").doc(user.uid)
+          .collection("levels").doc(p.id).set({ startDate: today });
+      }
+      setStartDate(levelStartDate);
+      await db.collection("users").doc(user.uid).set({ preset: p, startDate: levelStartDate });
+      await loadLevelData(user.uid, p.id);
       setScreen("tracker");
       setIsChangingLevel(false);
     } catch (e) {
@@ -175,7 +196,9 @@ function App() {
       const newDone = { ...done, [id]: !done[id] };
       setDone(newDone);
       const today = getTodayKey();
-      await db.collection("users").doc(user.uid).collection("workouts").doc(today).set(newDone);
+      await db.collection("users").doc(user.uid)
+        .collection("levels").doc(preset.id)
+        .collection("workouts").doc(today).set(newDone);
       setHistory(prev => ({ ...prev, [today]: newDone }));
     } catch (e) {
       setErrorMsg("Update error: " + e.message);
@@ -278,17 +301,19 @@ function App() {
   if (screen === "onboard") return (
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
-      <p style={{color:T.subtext,marginBottom:20}}>Pick your level.</p><ErrorBanner/>
+      <p style={{color:T.subtext,marginBottom:20}}>Pick your level.</p>
+      <ErrorBanner/>
       {isChangingLevel && (
         <button onClick={() => { setScreen("tracker"); setIsChangingLevel(false); }} style={{background:"none",border:"none",color:T.subtext,fontSize:14,cursor:"pointer",marginBottom:16,padding:0,display:"block"}}>
           ← Back
         </button>
       )}
       {PRESETS.map(p => (
-        <button key={p.id} onClick={() => pickPreset(p)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:T.card,border:`2px solid ${T.border}`,borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
+        <button key={p.id} onClick={() => pickPreset(p)} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",background:T.card,border:`2px solid ${preset.id===p.id?p.color:T.border}`,borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
           <div>
-            <div style={{fontWeight:700,fontSize:16,color:p.color}}>{p.label}</div>
+            <div style={{fontWeight:700,fontSize:16,color:p.color}}>{p.label} {preset.id===p.id?"✓":""}</div>
             <div style={{color:T.subtext,fontSize:12,marginTop:3}}>Starts at {p.startReps} reps · +{p.increment} every {p.every} days</div>
+            <div style={{color:T.faint,fontSize:11,marginTop:2}}>Independent history & streak</div>
           </div>
         </button>
       ))}
@@ -303,9 +328,7 @@ function App() {
         </div>
       )}
     </div>
-  );
-
-  return (
+  ););return (
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <span style={{fontWeight:900,fontSize:24}}>GRIND<span style={{color:accent}}>.</span></span>
@@ -352,10 +375,11 @@ function App() {
             </button>
           );
         })}
-        <button onClick={() => { setScreen("onboard"); setIsChangingLevel(true); }} style={{marginTop:8,padding:"10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:10,color:T.faint,fontSize:12,cursor:"pointer",width:"100%"}}>Change level</button>
+        <button onClick={() => { setScreen("onboard"); setIsChangingLevel(true); }} style={{marginTop:8,padding:"10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:10,color:T.faint,fontSize:12,cursor:"pointer",width:"100%"}}>Change level · {preset.label}</button>
       </>}
       {view==="history" && <>
-        <h2 style={{fontWeight:800,fontSize:20,margin:"0 0 16px"}}>This Week</h2>
+        <h2 style={{fontWeight:800,fontSize:20,margin:"0 0 4px"}}>This Week</h2>
+        <p style={{color:T.subtext,fontSize:12,margin:"0 0 16px"}}>{preset.label} history</p>
         <div style={{display:"flex",gap:8,marginBottom:24}}>
           {getWeek().map(({key,count,label}) => {
             const isToday = key===today;
@@ -370,13 +394,12 @@ function App() {
             );
           })}
         </div>
-        <p style={{color:T.subtext,fontSize:13,textAlign:"center"}}>Signed in as {user?.email}</p>
-
+        <p style={{color:T.subtext,fontSize:13,textAlign:"center",marginBottom:8}}>Signed in as {user?.email}</p>
         {(() => {
           const stats = getAllTimeStats();
           return (
             <>
-              <div style={{display:"flex",gap:10,margin:"24px 0 20px"}}>
+              <div style={{display:"flex",gap:10,margin:"16px 0 20px"}}>
                 {[["Total Days",stats.totalCompleted],["Current 🔥",stats.currentStreak],["Best 🏆",stats.longestStreak]].map(([l,v]) => (
                   <div key={l} style={{flex:1,background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:"14px 8px",textAlign:"center"}}>
                     <div style={{fontSize:20,fontWeight:800,color:accent}}>{v}</div>
@@ -387,10 +410,7 @@ function App() {
               <p style={{color:T.subtext,fontSize:11,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>All Time</p>
               <div style={{display:"grid",gridTemplateColumns:"repeat(10, 1fr)",gap:4,marginBottom:24}}>
                 {stats.calendar.map(({key, full, partial}) => (
-                  <div key={key} title={key} style={{
-                    aspectRatio:"1", borderRadius:3,
-                    background: full ? "#4caf50" : partial ? "#ff9800" : T.border,
-                  }}/>
+                  <div key={key} title={key} style={{aspectRatio:"1",borderRadius:3,background:full?"#4caf50":partial?"#ff9800":T.border}}/>
                 ))}
               </div>
               <p style={{color:T.subtext,fontSize:11,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>Badges</p>
@@ -398,14 +418,10 @@ function App() {
                 {BADGES.map(b => {
                   const unlocked = b.check(stats);
                   return (
-                    <div key={b.id} style={{
-                      background:T.card, border:`1px solid ${unlocked?accent+"55":T.border}`,
-                      borderRadius:14, padding:"16px 8px", textAlign:"center",
-                      opacity: unlocked ? 1 : 0.4,
-                    }}>
-                      <div style={{fontSize:28, marginBottom:6, filter: unlocked?"none":"grayscale(1)"}}>{b.emoji}</div>
-                      <div style={{fontSize:11, fontWeight:700, color:unlocked?T.text:T.subtext}}>{b.label}</div>
-                      <div style={{fontSize:9, color:T.subtext, marginTop:2}}>{b.desc}</div>
+                    <div key={b.id} style={{background:T.card,border:`1px solid ${unlocked?accent+"55":T.border}`,borderRadius:14,padding:"16px 8px",textAlign:"center",opacity:unlocked?1:0.4}}>
+                      <div style={{fontSize:28,marginBottom:6,filter:unlocked?"none":"grayscale(1)"}}>{b.emoji}</div>
+                      <div style={{fontSize:11,fontWeight:700,color:unlocked?T.text:T.subtext}}>{b.label}</div>
+                      <div style={{fontSize:9,color:T.subtext,marginTop:2}}>{b.desc}</div>
                     </div>
                   );
                 })}

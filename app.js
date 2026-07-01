@@ -168,7 +168,7 @@ function App() {
     } catch (e) {
       setErrorMsg("Sign in failed: " + e.code + " - " + e.message);
     }
-   }async function pickPreset(p) {
+                  }async function pickPreset(p) {
     try {
       setPreset(p);
       const today = getTodayKey();
@@ -328,7 +328,7 @@ function App() {
         </div>
       )}
     </div>
-  ););return (
+  );return (
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <span style={{fontWeight:900,fontSize:24}}>GRIND<span style={{color:accent}}>.</span></span>

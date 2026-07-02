@@ -57,9 +57,7 @@ function getTheme(dark) {
   return dark
     ? { bg:"#080808", text:"#f0f0f0", card:"#111", border:"#1e1e1e", subtext:"#555", faint:"#333" }
     : { bg:"#f5f5f5", text:"#111", card:"#fff", border:"#e0e0e0", subtext:"#777", faint:"#bbb" };
-}
-
-function Confetti() {
+}function Confetti() {
   const pieces = Array.from({length: 60});
   const colors = ["#ff6b35","#4caf50","#00bcd4","#ff9800","#f44336","#9c27b0","#ffeb3b"];
   return (
@@ -98,6 +96,7 @@ function App() {
   const [showCustom, setShowCustom] = useState(false);
   const [startDate, setStartDate] = useState(getTodayKey());
   const [done, setDone] = useState({});
+  const [lockedDays, setLockedDays] = useState({});
   const [view, setView] = useState("today");
   const [history, setHistory] = useState({});
   const [dark, setDark] = useState(() => localStorage.getItem("grind_theme") !== "light");
@@ -106,6 +105,8 @@ function App() {
   const [isChangingLevel, setIsChangingLevel] = useState(false);
 
   const T = getTheme(dark);
+  const today = getTodayKey();
+  const isTodayLocked = !!lockedDays[today];
 
   function toggleTheme() {
     const newDark = !dark;
@@ -114,7 +115,6 @@ function App() {
   }
 
   async function loadLevelData(uid, levelId) {
-    const today = getTodayKey();
     const todayDoc = await db.collection("users").doc(uid)
       .collection("levels").doc(levelId)
       .collection("workouts").doc(today).get();
@@ -122,8 +122,13 @@ function App() {
       .collection("levels").doc(levelId)
       .collection("workouts").get();
     const h = {};
-    snap.forEach(d => { h[d.id] = d.data(); });
+    const locked = {};
+    snap.forEach(d => {
+      h[d.id] = d.data();
+      if (d.data()._locked) locked[d.id] = true;
+    });
     setHistory(h);
+    setLockedDays(locked);
     if (todayDoc.exists) setDone(todayDoc.data());
     else setDone({});
   }
@@ -143,7 +148,7 @@ function App() {
             const data = doc.data();
             const p = data.preset || PRESETS[0];
             setPreset(p);
-            setStartDate(data.startDate || getTodayKey());
+            setStartDate(data.startDate || today);
             setScreen("tracker");
             await loadLevelData(u.uid, p.id);
           } else {
@@ -168,10 +173,9 @@ function App() {
     } catch (e) {
       setErrorMsg("Sign in failed: " + e.code + " - " + e.message);
     }
-                  }async function pickPreset(p) {
+}async function pickPreset(p) {
     try {
       setPreset(p);
-      const today = getTodayKey();
       const levelDoc = await db.collection("users").doc(user.uid)
         .collection("levels").doc(p.id).get();
       let levelStartDate = today;
@@ -192,10 +196,10 @@ function App() {
   }
 
   async function toggle(id) {
+    if (isTodayLocked) return;
     try {
       const newDone = { ...done, [id]: !done[id] };
       setDone(newDone);
-      const today = getTodayKey();
       await db.collection("users").doc(user.uid)
         .collection("levels").doc(preset.id)
         .collection("workouts").doc(today).set(newDone);
@@ -205,7 +209,22 @@ function App() {
     }
   }
 
-  const today = getTodayKey();
+  async function lockToday() {
+    if (isTodayLocked) return;
+    try {
+      const finalData = { ...done, _locked: true };
+      await db.collection("users").doc(user.uid)
+        .collection("levels").doc(preset.id)
+        .collection("workouts").doc(today).set(finalData);
+      setLockedDays(prev => ({ ...prev, [today]: true }));
+      setHistory(prev => ({ ...prev, [today]: finalData }));
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 2500);
+    } catch (e) {
+      setErrorMsg("Lock error: " + e.message);
+    }
+  }
+
   const dayNum = getDayNum(startDate);
   const reps = getReps(dayNum, preset, customReps);
   const doneCount = EXERCISES.filter(e => done[e.id]).length;
@@ -215,7 +234,7 @@ function App() {
   const accent = preset.color;
 
   useEffect(() => {
-    if (allDone && !prevAllDone) {
+    if (allDone && !prevAllDone && !isTodayLocked) {
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 2500);
     }
@@ -230,7 +249,8 @@ function App() {
       const key = d.toISOString().split("T")[0];
       const data = history[key] || {};
       const count = EXERCISES.filter(e => data[e.id]).length;
-      days.push({ key, count, label: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()] });
+      const locked = !!data._locked;
+      days.push({ key, count, label: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()], locked });
     }
     return days;
   }
@@ -248,7 +268,8 @@ function App() {
       const key = check.toISOString().split("T")[0];
       const data = history[key] || {};
       const count = EXERCISES.filter(e => data[e.id]).length;
-      const full = count >= EXERCISES.length - 1;
+      const locked = !!data._locked;
+      const full = locked && count >= 1;
       if (full) {
         totalCompleted++;
         tempStreak++;
@@ -256,7 +277,7 @@ function App() {
       } else {
         tempStreak = 0;
       }
-      calendar.push({ key, full, partial: count > 0 && !full });
+      calendar.push({ key, full, partial: count > 0 && !locked });
       check.setDate(check.getDate() + 1);
     }
     const checkBack = new Date();
@@ -265,7 +286,8 @@ function App() {
       const key = checkBack.toISOString().split("T")[0];
       const data = history[key] || {};
       const count = EXERCISES.filter(e => data[e.id]).length;
-      if (count >= EXERCISES.length - 1) {
+      const locked = !!data._locked;
+      if (locked && count >= 1) {
         currentStreak++;
         checkBack.setDate(checkBack.getDate() - 1);
       } else break;
@@ -278,9 +300,7 @@ function App() {
       ⚠️ {errorMsg}
       <button onClick={() => setErrorMsg("")} style={{float:"right",background:"none",border:"none",color:"#ff8888",cursor:"pointer"}}>✕</button>
     </div>
-  ) : null;
-
-  if (loading) return (
+  ) : null;if (loading) return (
     <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{color:T.subtext,fontSize:14}}>Loading...</div>
     </div>
@@ -353,17 +373,19 @@ function App() {
         </div>
         <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:16,marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-            <span style={{fontWeight:700}}>{perfectDone?"Perfect day! 🔥":allDone?"Crushed it! 💪":`${doneCount}/${EXERCISES.length} done`}</span>
+            <span style={{fontWeight:700}}>
+              {isTodayLocked ? "Day locked ✅" : perfectDone?"Perfect day! 🔥":allDone?"Crushed it! 💪":`${doneCount}/${EXERCISES.length} done`}
+            </span>
             <span style={{color:T.subtext}}>{pct}%</span>
           </div>
           <div style={{height:8,background:T.border,borderRadius:8,overflow:"hidden"}}>
-            <div style={{height:"100%",width:pct+"%",background:allDone?"#4caf50":accent,borderRadius:8,transition:"width 0.4s"}}/>
+            <div style={{height:"100%",width:pct+"%",background:isTodayLocked?"#4caf50":allDone?"#4caf50":accent,borderRadius:8,transition:"width 0.4s"}}/>
           </div>
         </div>
         {EXERCISES.map(ex => {
           const isDone = !!done[ex.id];
           return (
-            <button key={ex.id} onClick={() => toggle(ex.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 18px",background:isDone?(dark?"#0a1a0a":"#e8f5e9"):T.card,border:isDone?"1.5px solid #4caf5055":`1.5px solid ${T.border}`,borderRadius:14,cursor:"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left"}}>
+            <button key={ex.id} onClick={() => toggle(ex.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 18px",background:isDone?(dark?"#0a1a0a":"#e8f5e9"):T.card,border:isDone?"1.5px solid #4caf5055":`1.5px solid ${T.border}`,borderRadius:14,cursor:isTodayLocked?"not-allowed":"pointer",marginBottom:10,width:"100%",boxSizing:"border-box",textAlign:"left",opacity:isTodayLocked?0.7:1}}>
               <div style={{display:"flex",alignItems:"center",gap:14}}>
                 <span style={{fontSize:24}}>{ex.emoji}</span>
                 <div>
@@ -375,16 +397,25 @@ function App() {
             </button>
           );
         })}
-        <button onClick={() => { setScreen("onboard"); setIsChangingLevel(true); }} style={{marginTop:8,padding:"10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:10,color:T.faint,fontSize:12,cursor:"pointer",width:"100%"}}>Change level · {preset.label}</button>
-      </>}
-      {view==="history" && <>
+        {!isTodayLocked && doneCount > 0 && (
+          <button onClick={lockToday} style={{marginTop:16,padding:"16px",background:accent,border:"none",borderRadius:14,color:"#000",fontWeight:800,fontSize:16,cursor:"pointer",width:"100%"}}>
+            Done for today — lock it in 🔒
+          </button>
+        )}
+        {isTodayLocked && (
+          <div style={{marginTop:16,padding:"16px",background:T.card,border:`1px solid #4caf5055`,borderRadius:14,textAlign:"center"}}>
+            <span style={{color:"#4caf50",fontWeight:700}}>✅ Today's session locked in — see you tomorrow!</span>
+          </div>
+        )}
+        <button onClick={() => { setScreen("onboard"); setIsChangingLevel(true); }} style={{marginTop:10,padding:"10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:10,color:T.faint,fontSize:12,cursor:"pointer",width:"100%"}}>Change level · {preset.label}</button>
+      </>}{view==="history" && <>
         <h2 style={{fontWeight:800,fontSize:20,margin:"0 0 4px"}}>This Week</h2>
         <p style={{color:T.subtext,fontSize:12,margin:"0 0 16px"}}>{preset.label} history</p>
         <div style={{display:"flex",gap:8,marginBottom:24}}>
-          {getWeek().map(({key,count,label}) => {
+          {getWeek().map(({key,count,label,locked}) => {
             const isToday = key===today;
-            const full = count>=EXERCISES.length-1;
-            const partial = count>0 && !full;
+            const full = locked && count >= 1;
+            const partial = count>0 && !locked;
             return (
               <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
                 <span style={{fontSize:10,color:isToday?accent:T.subtext}}>{label}</span>

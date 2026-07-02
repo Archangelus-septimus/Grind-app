@@ -91,6 +91,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [screen, setScreen] = useState("login");
+  const [username, setUsername] = useState("");
+  const [usernameInput, setUsernameInput] = useState("");
   const [preset, setPreset] = useState(PRESETS[0]);
   const [customReps, setCustomReps] = useState(10);
   const [showCustom, setShowCustom] = useState(false);
@@ -146,13 +148,18 @@ function App() {
           const doc = await db.collection("users").doc(u.uid).get();
           if (doc.exists) {
             const data = doc.data();
-            const p = data.preset || PRESETS[0];
-            setPreset(p);
-            setStartDate(data.startDate || today);
-            setScreen("tracker");
-            await loadLevelData(u.uid, p.id);
+            if (!data.username) {
+              setScreen("username");
+            } else {
+              setUsername(data.username);
+              const p = data.preset || PRESETS[0];
+              setPreset(p);
+              setStartDate(data.startDate || today);
+              setScreen(data.preset ? "tracker" : "onboard");
+              await loadLevelData(u.uid, p.id);
+            }
           } else {
-            setScreen("onboard");
+            setScreen("username");
           }
         } else {
           setScreen("login");
@@ -173,7 +180,22 @@ function App() {
     } catch (e) {
       setErrorMsg("Sign in failed: " + e.code + " - " + e.message);
     }
-    }async function pickPreset(p) {
+                }async function saveUsername() {
+    const clean = usernameInput.trim().replace(/\s+/g, "_").slice(0, 20);
+    if (clean.length < 3) {
+      setErrorMsg("Username must be at least 3 characters");
+      return;
+    }
+    try {
+      await db.collection("users").doc(user.uid).set({ username: clean }, { merge: true });
+      setUsername(clean);
+      setScreen("onboard");
+    } catch (e) {
+      setErrorMsg("Error saving username: " + e.message);
+    }
+  }
+
+  async function pickPreset(p) {
     try {
       setPreset(p);
       const levelDoc = await db.collection("users").doc(user.uid)
@@ -186,7 +208,7 @@ function App() {
           .collection("levels").doc(p.id).set({ startDate: today });
       }
       setStartDate(levelStartDate);
-      await db.collection("users").doc(user.uid).set({ preset: p, startDate: levelStartDate });
+      await db.collection("users").doc(user.uid).set({ preset: p, startDate: levelStartDate }, { merge: true });
       await loadLevelData(user.uid, p.id);
       setScreen("tracker");
       setIsChangingLevel(false);
@@ -335,6 +357,22 @@ function App() {
     </div>
   );
 
+  if (screen === "username") return (
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"60px 18px 48px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+      <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
+      <p style={{color:T.subtext,marginBottom:32}}>Pick a username to get started.</p>
+      <ErrorBanner/>
+      <input type="text" placeholder="e.g. chris_grinds" maxLength={20} value={usernameInput}
+        onChange={e => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,""))}
+        style={{width:"100%",padding:"16px",background:T.card,border:`2px solid ${T.border}`,borderRadius:14,color:T.text,fontSize:20,fontWeight:700,boxSizing:"border-box",marginBottom:8}}
+      />
+      <p style={{color:T.subtext,fontSize:12,margin:"0 0 16px"}}>3–20 characters, letters, numbers and _ only</p>
+      <button onClick={saveUsername} style={{padding:"16px",background:"#ff6b35",border:"none",borderRadius:14,color:"#000",fontWeight:800,fontSize:16,cursor:"pointer",width:"100%"}}>
+        Let's go 💪
+      </button>
+    </div>
+  );
+
   if (screen === "onboard") return (
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <h1 style={{fontSize:36,fontWeight:900,margin:"0 0 6px"}}>GRIND<span style={{color:"#ff6b35"}}>.</span></h1>
@@ -365,7 +403,9 @@ function App() {
         </div>
       )}
     </div>
-  );return (
+  );
+
+  return (
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter',system-ui,sans-serif",maxWidth:480,margin:"0 auto",padding:"24px 18px 48px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <span style={{fontWeight:900,fontSize:24}}>GRIND<span style={{color:accent}}>.</span></span>
@@ -390,9 +430,7 @@ function App() {
         </div>
         <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:14,padding:16,marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-            <span style={{fontWeight:700}}>
-              {isTodayLocked ? "Day locked ✅" : perfectDone?"Perfect day! 🔥":allDone?"Crushed it! 💪":`${doneCount}/${EXERCISES.length} done`}
-            </span>
+            <span style={{fontWeight:700}}>{isTodayLocked?"Day locked ✅":perfectDone?"Perfect day! 🔥":allDone?"Crushed it! 💪":`${doneCount}/${EXERCISES.length} done`}</span>
             <span style={{color:T.subtext}}>{pct}%</span>
           </div>
           <div style={{height:8,background:T.border,borderRadius:8,overflow:"hidden"}}>
@@ -430,7 +468,8 @@ function App() {
           </div>
         )}
         <button onClick={() => { setScreen("onboard"); setIsChangingLevel(true); }} style={{marginTop:10,padding:"10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:10,color:T.faint,fontSize:12,cursor:"pointer",width:"100%"}}>Change level · {preset.label}</button>
-      </>}{view==="history" && <>
+      </>}
+      {view==="history" && <>
         <h2 style={{fontWeight:800,fontSize:20,margin:"0 0 4px"}}>This Week</h2>
         <p style={{color:T.subtext,fontSize:12,margin:"0 0 16px"}}>{preset.label} history</p>
         <div style={{display:"flex",gap:8,marginBottom:24}}>
@@ -447,7 +486,7 @@ function App() {
             );
           })}
         </div>
-        <p style={{color:T.subtext,fontSize:13,textAlign:"center",marginBottom:8}}>Signed in as {user?.email}</p>
+        <p style={{color:T.subtext,fontSize:13,textAlign:"center",marginBottom:8}}>@{username}</p>
         {(() => {
           const stats = getAllTimeStats();
           return (

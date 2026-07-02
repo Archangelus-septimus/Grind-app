@@ -173,7 +173,7 @@ function App() {
     } catch (e) {
       setErrorMsg("Sign in failed: " + e.code + " - " + e.message);
     }
-}async function pickPreset(p) {
+    }async function pickPreset(p) {
     try {
       setPreset(p);
       const levelDoc = await db.collection("users").doc(user.uid)
@@ -222,6 +222,23 @@ function App() {
       setTimeout(() => setShowConfetti(false), 2500);
     } catch (e) {
       setErrorMsg("Lock error: " + e.message);
+    }
+  }
+
+  function shareWorkout() {
+    const stats = getAllTimeStats();
+    const badge = BADGES.slice().reverse().find(b => b.check(stats));
+    const text = `💪 Day ${dayNum} on GRIND.\n\n` +
+      `✅ ${doneCount}/${EXERCISES.length} exercises done\n` +
+      `🔥 ${stats.currentStreak} day streak\n` +
+      (badge ? `🏆 Badge: ${badge.emoji} ${badge.label}\n` : "") +
+      `\nTrack your calisthenics journey 👇\ngrind-app-five.vercel.app`;
+    if (navigator.share) {
+      navigator.share({ text });
+    } else {
+      navigator.clipboard.writeText(text).then(() => {
+        alert("Copied to clipboard! Paste it anywhere to share 💪");
+      });
     }
   }
 
@@ -403,8 +420,13 @@ function App() {
           </button>
         )}
         {isTodayLocked && (
-          <div style={{marginTop:16,padding:"16px",background:T.card,border:`1px solid #4caf5055`,borderRadius:14,textAlign:"center"}}>
-            <span style={{color:"#4caf50",fontWeight:700}}>✅ Today's session locked in — see you tomorrow!</span>
+          <div style={{marginTop:16,borderRadius:14,overflow:"hidden"}}>
+            <div style={{padding:"16px",background:T.card,border:`1px solid #4caf5055`,textAlign:"center"}}>
+              <span style={{color:"#4caf50",fontWeight:700}}>✅ Today's session locked in — see you tomorrow!</span>
+            </div>
+            <button onClick={shareWorkout} style={{marginTop:8,padding:"14px",background:"#25D366",border:"none",borderRadius:14,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer",width:"100%"}}>
+              Share your streak 📤
+            </button>
           </div>
         )}
         <button onClick={() => { setScreen("onboard"); setIsChangingLevel(true); }} style={{marginTop:10,padding:"10px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:10,color:T.faint,fontSize:12,cursor:"pointer",width:"100%"}}>Change level · {preset.label}</button>
